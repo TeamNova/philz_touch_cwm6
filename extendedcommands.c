@@ -84,17 +84,21 @@ int get_filtered_menu_selection(const char** headers, char** items, int menu_onl
     return ret;
 }
 
-void write_string_to_file(const char* filename, const char* string) {
-    ensure_path_mounted(filename);
+int write_string_to_file(const char* filename, const char* string) {
     char tmp[PATH_MAX];
+    int ret = -1;
+
+    ensure_path_mounted(filename);
     sprintf(tmp, "mkdir -p $(dirname %s)", filename);
     __system(tmp);
     FILE *file = fopen(filename, "w");
     if (file != NULL) {
-        fprintf(file, "%s", string);
+        ret = fprintf(file, "%s", string);
         fclose(file);
     } else
         LOGE("Cannot write to %s\n", filename);
+
+    return ret;
 }
 
 void write_recovery_version() {
@@ -307,7 +311,7 @@ void free_string_array(char** array) {
     free(array);
 }
 
-char** gather_files(const char* directory, const char* fileExtensionOrDirectory, int* numFiles) {
+char** gather_files(const char* basedir, const char* fileExtensionOrDirectory, int* numFiles) {
     char path[PATH_MAX] = "";
     DIR *dir;
     struct dirent *de;
@@ -316,7 +320,15 @@ char** gather_files(const char* directory, const char* fileExtensionOrDirectory,
     char** files = NULL;
     int pass;
     *numFiles = 0;
-    int dirLen = strlen(directory);
+    int dirLen = strlen(basedir);
+    char directory[PATH_MAX];
+
+    // Append a trailing slash if necessary
+    strcpy(directory, basedir);
+    if (directory[dirLen - 1] != '/') {
+        strcat(directory, "/");
+        ++dirLen;
+    }
 
     dir = opendir(directory);
     if (dir == NULL) {
@@ -517,7 +529,8 @@ void show_choose_zip_menu(const char *mount_point) {
 
     if (yes_confirm) {
         install_zip(file);
-        write_last_install_path(DirName(file));
+        sprintf(tmp, "%s", DirName(file));
+        write_last_install_path(tmp);
     }
 
     free(file);
@@ -550,18 +563,20 @@ void show_nandroid_delete_menu(const char* volume_path) {
     }
 
     static const char* headers[] = { "Choose a backup to delete", NULL };
+    char path[PATH_MAX];
     char tmp[PATH_MAX];
+    char* file;
 
     if (twrp_backup_mode.value) {
         char device_id[PROPERTY_VALUE_MAX];
         get_device_id(device_id);
-        sprintf(tmp, "%s/%s/%s", volume_path, TWRP_BACKUP_PATH, device_id);
+        sprintf(path, "%s/%s/%s", volume_path, TWRP_BACKUP_PATH, device_id);
     } else {
-        sprintf(tmp, "%s/%s", volume_path, CWM_BACKUP_PATH);    
+        sprintf(path, "%s/%s", volume_path, CWM_BACKUP_PATH);    
     }
 
     for(;;) {
-        char* file = choose_file_menu(tmp, NULL, headers);
+        file = choose_file_menu(path, NULL, headers);
         if (file == NULL)
             return;
 
